@@ -1,0 +1,27 @@
+// Generic functions of package reflect, interpreted from source.
+package reflect
+
+import real "reflect"
+
+// TypeFor returns the Type that represents the type argument T.
+func TypeFor[T any]() real.Type {
+	var v T
+	if t := real.TypeOf(v); t != nil {
+		return t
+	}
+	return real.TypeOf((*T)(nil)).Elem()
+}
+
+// TypeAssert is semantically equivalent to:
+//
+//	v2, ok := v.Interface().(T)
+func TypeAssert[T any](v real.Value) (T, bool) {
+	if !v.IsValid() {
+		panic(&real.ValueError{Method: "reflect.TypeAssert", Kind: real.Invalid})
+	}
+	if !v.CanInterface() {
+		panic("reflect.TypeAssert: cannot return value obtained from unexported field or method")
+	}
+	t, ok := v.Interface().(T)
+	return t, ok
+}

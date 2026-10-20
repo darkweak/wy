@@ -1,0 +1,89 @@
+// Package iter, as seen by wy's tree-walking interpreter. Seq and Seq2 are
+// the standard definitions; Pull and Pull2 are implemented with a goroutine
+// instead of the runtime's coroutines, with the same observable behaviour.
+package iter
+
+type Seq[V any] func(yield func(V) bool)
+
+type Seq2[K, V any] func(yield func(K, V) bool)
+
+type pulled[V any] struct {
+	v  V
+	ok bool
+}
+
+func Pull[V any](seq Seq[V]) (next func() (V, bool), stop func()) {
+	req := make(chan bool)
+	resp := make(chan pulled[V])
+	started, done := false, false
+	var panicVal any
+	run := func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicVal = r
+			}
+			done = true
+			close(resp)
+		}()
+		if !<-req {
+			return
+		}
+		seq(func(v V) bool {
+			resp <- pulled[V]{v, true}
+			return <-req
+		})
+	}
+	rethrow := func() {
+		if panicVal != nil {
+			p := panicVal
+			panicVal = nil
+			panic(p)
+		}
+	}
+	next = func() (V, bool) {
+		var zero V
+		if done {
+			return zero, false
+		}
+		if !started {
+			started = true
+			go run()
+		}
+		req <- true
+		m, ok := <-resp
+		rethrow()
+		if !ok {
+			return zero, false
+		}
+		return m.v, true
+	}
+	stop = func() {
+		if done {
+			return
+		}
+		if !started {
+			done = true
+			return
+		}
+		req <- false
+		for range resp {
+		}
+		rethrow()
+	}
+	return next, stop
+}
+
+type pulled2[K, V any] struct {
+	k K
+	v V
+}
+
+func Pull2[K, V any](seq Seq2[K, V]) (next func() (K, V, bool), stop func()) {
+	n, s := Pull(func(yield func(pulled2[K, V]) bool) {
+		seq(func(k K, v V) bool { return yield(pulled2[K, V]{k, v}) })
+	})
+	return func() (K, V, bool) {
+		p, ok := n()
+		return p.k, p.v, ok
+	}, s
+}

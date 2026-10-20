@@ -1,0 +1,50 @@
+// Generic functions of package errors, interpreted from source. Adapted
+// from GOROOT/src/errors/wrap.go.
+package errors
+
+// AsType finds the first error in err's tree that matches the type E, and
+// if one is found, returns that error value and true. Otherwise, it
+// returns the zero value of E and false.
+func AsType[E error](err error) (E, bool) {
+	if err == nil {
+		var zero E
+		return zero, false
+	}
+	var pe *E // lazily initialized
+	return asType(err, &pe)
+}
+
+func asType[E error](err error, ppe **E) (_ E, _ bool) {
+	for {
+		if e, ok := err.(E); ok {
+			return e, true
+		}
+		if x, ok := err.(interface{ As(any) bool }); ok {
+			if *ppe == nil {
+				*ppe = new(E)
+			}
+			if x.As(*ppe) {
+				return **ppe, true
+			}
+		}
+		switch x := err.(type) {
+		case interface{ Unwrap() error }:
+			err = x.Unwrap()
+			if err == nil {
+				return
+			}
+		case interface{ Unwrap() []error }:
+			for _, err := range x.Unwrap() {
+				if err == nil {
+					continue
+				}
+				if x, ok := asType(err, ppe); ok {
+					return x, true
+				}
+			}
+			return
+		default:
+			return
+		}
+	}
+}
