@@ -12,10 +12,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"wy/internal/typescope"
 
-	"wy/internal/source"
-	"wy/internal/typeexpr"
+	"github.com/darkweak/wy/internal/source"
+	"github.com/darkweak/wy/internal/typeexpr"
+	"github.com/darkweak/wy/internal/typescope"
 )
 
 // How interactive inputs become Go packages

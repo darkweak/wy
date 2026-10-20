@@ -4,7 +4,7 @@ import (
 	"go/types"
 	"reflect"
 
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 type nativeInfo = native.Package
@@ -14,6 +14,9 @@ type nativeInfo = native.Package
 func (in *Interp) nativeInfo(path string) *native.Package {
 	if _, src := in.src[path]; src {
 		return nil
+	}
+	if p := in.overrides[path]; p != nil {
+		return p
 	}
 	return native.Lookup(path)
 }

@@ -18,9 +18,9 @@ import (
 	"strings"
 	"sync"
 
-	"wy/bridge"
-	"wy/internal/gocmd"
-	"wy/internal/source"
+	"github.com/darkweak/wy/bridge"
+	"github.com/darkweak/wy/internal/gocmd"
+	"github.com/darkweak/wy/internal/source"
 )
 
 // bridgePath is the import path of the bridge package, discovered rather

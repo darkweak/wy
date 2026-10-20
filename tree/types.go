@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unsafe"
 
-	"wy/internal/source"
-	"wy/tree/native"
+	"github.com/darkweak/wy/internal/source"
+	"github.com/darkweak/wy/tree/native"
 )
 
 // Values of interpreted code live in real Go memory: every types.Type is

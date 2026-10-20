@@ -345,18 +345,14 @@ func (c *compiler) store(l ast.Expr) (func(fr *frame) func(v reflect.Value), typ
 	case *ast.SelectorExpr:
 		if sel, ok := c.info.Selections[x]; ok && sel.Kind() == types.FieldVal {
 			base := c.addr(x.X)
-			var cur reflect.Value
-			path := c.fieldPath(func(*frame) reflect.Value { return cur }, c.typeOf(x.X), sel.Index())
+			walk := c.fieldWalk(c.typeOf(x.X), sel.Index())
 			_, viaPtr := c.typeOf(x.X).Underlying().(*types.Pointer)
 			return func(fr *frame) func(reflect.Value) {
 				b := base(fr)
 				if viaPtr {
 					b = copyValue(b) // the pointer's value now, not the variable
 				}
-				return func(v reflect.Value) {
-					cur = b
-					path(fr).Set(v)
-				}
+				return func(v reflect.Value) { walk(b).Set(v) }
 			}, t
 		}
 	}

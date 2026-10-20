@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	des "crypto/des"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

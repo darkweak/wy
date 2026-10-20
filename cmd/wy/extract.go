@@ -6,7 +6,7 @@ import (
 	"flag"
 	"os"
 
-	"wy/internal/extract"
+	"github.com/darkweak/wy/internal/extract"
 )
 
 // extractCmd generates native symbol tables for packages, so that programs

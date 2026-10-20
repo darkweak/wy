@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"log"
 
-	"wy/examples/rules/model"
-	"wy/interp"
+	"github.com/darkweak/wy/examples/rules/model"
+	"github.com/darkweak/wy/interp"
 )
 
 // Rules are ordinary Go source, e.g. read from a file or a database.
 const rules = `
-import "wy/examples/rules/model"
+import "github.com/darkweak/wy/examples/rules/model"
 
 var vip = map[string]bool{"ada": true}
 

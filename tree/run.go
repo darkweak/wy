@@ -5,11 +5,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"wy/script"
+	"github.com/darkweak/wy/script"
 )
 
 // RunSource interprets a program or snippet (any mix of imports,
-// declarations and statements; see wy/script.Prepare), with args as
+// declarations and statements; see github.com/darkweak/wy/script.Prepare), with args as
 // os.Args[1:].
 func (in *Interp) RunSource(ctx context.Context, src []byte, filename string, args []string) error {
 	prep, err := script.PrepareWith(string(src), filename, stdIndex())

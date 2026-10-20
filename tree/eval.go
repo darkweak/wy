@@ -13,10 +13,10 @@ import (
 	"strings"
 	"sync"
 
-	"wy/internal/source"
-	"wy/internal/typescope"
-	"wy/tree/native"
-	"wy/tree/stdsrc"
+	"github.com/darkweak/wy/internal/source"
+	"github.com/darkweak/wy/internal/typescope"
+	"github.com/darkweak/wy/tree/native"
+	"github.com/darkweak/wy/tree/stdsrc"
 )
 
 // Interactive evaluation
@@ -171,7 +171,7 @@ func (in *Interp) prepareCell(src string) (func() []reflect.Value, int, error) {
 		}
 		for _, spec := range f.Imports {
 			path, _ := strconv.Unquote(spec.Path.Value)
-			p, err := in.importPkg(path)
+			p, err := in.Import(path)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -259,7 +259,7 @@ func (in *Interp) prepareCell(src string) (func() []reflect.Value, int, error) {
 		}
 	}
 	var errs []error
-	conf := in.config(nil)
+	conf := in.config(nil, false)
 	conf.Error = func(err error) {
 		te, ok := err.(types.Error)
 		if ok && strings.HasPrefix(te.Msg, "declared and not used") && topLocals[te.Pos] {

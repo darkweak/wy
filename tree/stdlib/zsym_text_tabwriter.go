@@ -6,8 +6,8 @@ import (
 	"go/constant"
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	tabwriter "text/tabwriter"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

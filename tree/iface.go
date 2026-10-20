@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 // Interface values
@@ -40,6 +40,7 @@ type ntype struct {
 	impl     map[types.Type]bool
 	combo    reflect.Type
 	comboSet bool
+	families map[reflect.Type]reflect.Type // native.Family base -> member
 }
 
 type boxed struct {
@@ -496,9 +497,40 @@ func wrapperIndex() map[reflect.Type]reflect.Type {
 	return idx
 }
 
+// familyType returns the member of f matching the optional methods nt has.
+func (nt *ntype) familyType(f *native.Family) reflect.Type {
+	nt.mu.Lock()
+	wt, ok := nt.families[f.Base]
+	nt.mu.Unlock()
+	if ok {
+		return wt
+	}
+	ms := types.NewMethodSet(nt.t)
+	var mask uint
+	for i, opt := range f.Optional {
+		m := opt.Method(0)
+		if sel := ms.Lookup(nil, m.Name); sel != nil && nt.in.rtype(sel.Obj().Type()) == m.Type {
+			mask |= 1 << i
+		}
+	}
+	wt = f.Members[mask]
+	nt.mu.Lock()
+	if nt.families == nil {
+		nt.families = map[reflect.Type]reflect.Type{}
+	}
+	nt.families[f.Base] = wt
+	nt.mu.Unlock()
+	return wt
+}
+
 // wrapFor wraps a boxed value so that it implements the native interface
 // type dst.
 func (in *Interp) wrapFor(b boxed, dst reflect.Type) reflect.Value {
+	if f := native.FamilyOf(dst); f != nil {
+		if wt := b.t.familyType(f); wt != nil {
+			return newWrapper(wt, b)
+		}
+	}
 	if wt := b.t.comboType(); wt != nil && wt.Implements(dst) {
 		return newWrapper(wt, b)
 	}

@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	subtle "crypto/subtle"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

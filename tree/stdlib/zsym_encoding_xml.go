@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	xml "encoding/xml"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

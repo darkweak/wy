@@ -7,8 +7,8 @@ import (
 
 	context "context"
 	driver "database/sql/driver"
+	"github.com/darkweak/wy/tree/native"
 	reflect2 "reflect"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

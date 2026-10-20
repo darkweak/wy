@@ -6,9 +6,9 @@ import (
 	"go/constant"
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	ast "go/ast"
 	token "go/token"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

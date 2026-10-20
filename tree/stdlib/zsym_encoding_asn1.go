@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	asn1 "encoding/asn1"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

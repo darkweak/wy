@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	sha512 "crypto/sha512"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

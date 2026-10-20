@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"wy/internal/gocmd"
+	"github.com/darkweak/wy/internal/gocmd"
 )
 
 // preferred resolves package names that several standard packages share.

@@ -6,8 +6,8 @@ import (
 	"go/constant"
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	utf8 "unicode/utf8"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

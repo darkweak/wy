@@ -6,8 +6,8 @@ import (
 	"go/constant"
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	adler32 "hash/adler32"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	heap "container/heap"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

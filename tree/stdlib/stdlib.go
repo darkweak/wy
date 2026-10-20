@@ -3,3 +3,4 @@
 package stdlib
 
 //go:generate go run gen.go
+//go:generate go run gen_families.go

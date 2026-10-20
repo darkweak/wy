@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"strings"
 
-	"wy/internal/gocmd"
+	"github.com/darkweak/wy/internal/gocmd"
 )
 
 // Options control how a program is built and run.

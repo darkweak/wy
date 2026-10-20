@@ -7,11 +7,11 @@ import (
 	"reflect"
 
 	bufio "bufio"
+	"github.com/darkweak/wy/tree/native"
 	fs "io/fs"
 	net "net"
 	http "net/http"
 	url "net/url"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 // A host package, as `wy extract` would register it.

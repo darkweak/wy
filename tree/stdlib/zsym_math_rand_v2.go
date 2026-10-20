@@ -5,8 +5,8 @@ package stdlib
 import (
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	rand "math/rand/v2"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

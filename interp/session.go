@@ -33,12 +33,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"wy/internal/typescope"
 
-	"wy/bridge"
-	"wy/internal/gocmd"
-	"wy/internal/source"
-	"wy/internal/typeexpr"
+	"github.com/darkweak/wy/bridge"
+	"github.com/darkweak/wy/internal/gocmd"
+	"github.com/darkweak/wy/internal/source"
+	"github.com/darkweak/wy/internal/typeexpr"
+	"github.com/darkweak/wy/internal/typescope"
 )
 
 // Options configure a Session.

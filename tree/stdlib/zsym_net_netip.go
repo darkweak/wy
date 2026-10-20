@@ -5,8 +5,8 @@ package stdlib
 import (
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	netip "net/netip"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

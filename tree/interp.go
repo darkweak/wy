@@ -37,9 +37,9 @@ import (
 	"strings"
 	"sync"
 
-	"wy/tree/native"
-	_ "wy/tree/stdlib"
-	"wy/tree/stdsrc"
+	"github.com/darkweak/wy/tree/native"
+	_ "github.com/darkweak/wy/tree/stdlib"
+	"github.com/darkweak/wy/tree/stdsrc"
 )
 
 // Options configure an interpreter.
@@ -49,7 +49,33 @@ type Options struct {
 	ModuleDir string
 	// Args are the program's command-line arguments (os.Args[1:]).
 	Args []string
-	// Stderr receives the output of the print and println builtins.
+	// GoPath is a GOPATH-style root: packages that are neither standard,
+	// registered, in the module of ModuleDir nor vendored are interpreted
+	// from GoPath/src/<import path>.
+	GoPath string
+	// Forbid lists packages that interpreted code may not import, such as
+	// "unsafe" or "syscall"; a path also forbids its subpackages. The
+	// standard sources embedded in wy (slices, maps, ...) are exempt.
+	Forbid []string
+	// Env, if not nil, is the environment seen by interpreted code
+	// ("key=value" entries): os.Getenv, os.Setenv and the other environment
+	// functions use a private copy of it instead of the process environment.
+	Env []string
+	// Restricted keeps interpreted code from ending or signalling the host
+	// process: os.Exit panics with an *ExitError (which interpreted code
+	// cannot recover), the standard logger's Fatal functions panic like
+	// Panic, and os.FindProcess refuses the host process.
+	Restricted bool
+	// Stdin is read by the fmt.Scan functions, and is os.Stdin for
+	// interpreted code if it is an *os.File. Default: os.Stdin.
+	Stdin io.Reader
+	// Stdout receives the output of the fmt.Print functions, and is
+	// os.Stdout for interpreted code if it is an *os.File. Default:
+	// os.Stdout.
+	Stdout io.Writer
+	// Stderr receives the output of the print and println builtins, of the
+	// standard logger and of flag.CommandLine, and is os.Stderr for
+	// interpreted code if it is an *os.File. Default: os.Stderr.
 	Stderr io.Writer
 }
 
@@ -76,6 +102,8 @@ type Interp struct {
 	modRoot   string
 
 	closures sync.Map // funcval pointer -> *closure
+
+	overrides map[string]*native.Package // per-interpreter replacements of native packages
 
 	session *session // interactive state (Eval)
 
@@ -109,15 +137,22 @@ func New(opts Options) *Interp {
 	in.natives = newNatives(in)
 	in.rts = newRtypes(in)
 	in.ntypes.in = in
+	if opts.Stdin == nil {
+		in.opts.Stdin = os.Stdin
+	}
+	if opts.Stdout == nil {
+		in.opts.Stdout = os.Stdout
+	}
 	if opts.Stderr == nil {
 		in.opts.Stderr = os.Stderr
 	}
+	in.overrides = in.hostOverrides()
 	if opts.ModuleDir != "" {
 		in.findModule(opts.ModuleDir)
 	}
 	// iter is needed to map compiled iterator types; load it up front.
 	in.loadMu.Lock()
-	if _, err := in.importPkg("iter"); err != nil {
+	if _, err := in.importPkg("iter", ""); err != nil {
 		panic(err)
 	}
 	in.loadMu.Unlock()
@@ -145,10 +180,13 @@ func (in *Interp) findModule(dir string) {
 	}
 }
 
-// Import implements types.Importer.
-func (in *Interp) Import(path string) (*types.Package, error) { return in.importPkg(path) }
+// Import implements types.Importer, for the code being interpreted: it
+// applies Options.Forbid.
+func (in *Interp) Import(path string) (*types.Package, error) {
+	return importer{in: in}.ImportFrom(path, "", 0)
+}
 
-func (in *Interp) importPkg(path string) (*types.Package, error) {
+func (in *Interp) importPkg(path, fromDir string) (*types.Package, error) {
 	if path == "unsafe" {
 		return types.Unsafe, nil
 	}
@@ -159,7 +197,7 @@ func (in *Interp) importPkg(path string) (*types.Package, error) {
 		return p, nil
 	}
 	if files := stdsrc.Package(path); files != nil {
-		return in.loadSource(path, files)
+		return in.loadSource(path, files, true)
 	}
 	if np := native.Lookup(path); np != nil {
 		in.rtMu.Lock()
@@ -169,7 +207,7 @@ func (in *Interp) importPkg(path string) (*types.Package, error) {
 		if files := stdsrc.Overlay(path); files != nil {
 			// Generic declarations of the package, interpreted from
 			// source, join its scope.
-			op, err := in.loadSource("wy/overlay/"+path, files)
+			op, err := in.loadSource("wy/overlay/"+path, files, true)
 			if err != nil {
 				return nil, err
 			}
@@ -181,16 +219,15 @@ func (in *Interp) importPkg(path string) (*types.Package, error) {
 		}
 		return p, nil
 	}
-	if in.modPath != "" && (path == in.modPath || strings.HasPrefix(path, in.modPath+"/")) {
-		dir := filepath.Join(in.modRoot, strings.TrimPrefix(strings.TrimPrefix(path, in.modPath), "/"))
+	if dir := in.sourceDir(path, fromDir); dir != "" {
 		files, err := readPackageDir(dir)
 		if err != nil {
 			return nil, err
 		}
-		return in.loadSource(path, files)
+		return in.loadSource(path, files, false)
 	}
-	return nil, fmt.Errorf("package %s is not available to the interpreter (no compiled symbols for it; "+
-		"generate them with `wy extract`, or use wy's compiled mode)", path)
+	return nil, fmt.Errorf("package %s is not available to the interpreter (no compiled symbols or source for it; "+
+		"generate them with `wy extract`, vendor it, or use wy's compiled mode)", path)
 }
 
 // readPackageDir reads the non-test Go files of dir that match the current
@@ -234,9 +271,11 @@ func (in *Interp) newInfo() *types.Info {
 	}
 }
 
-func (in *Interp) config(errs *[]error) *types.Config {
+// config returns the type-checking configuration of a package; trusted
+// packages (wy's embedded sources) are exempt from Options.Forbid.
+func (in *Interp) config(errs *[]error, trusted bool) *types.Config {
 	return &types.Config{
-		Importer: in,
+		Importer: importer{in: in, trusted: trusted},
 		Sizes:    in.sizes,
 		Context:  in.tctx,
 		Error: func(err error) {
@@ -248,7 +287,7 @@ func (in *Interp) config(errs *[]error) *types.Config {
 }
 
 // loadSource parses, type-checks and initializes a source package.
-func (in *Interp) loadSource(path string, files map[string][]byte) (*types.Package, error) {
+func (in *Interp) loadSource(path string, files map[string][]byte, trusted bool) (*types.Package, error) {
 	in.pkgs[path] = nil // cycle marker
 	names := make([]string, 0, len(files))
 	for n := range files {
@@ -266,7 +305,7 @@ func (in *Interp) loadSource(path string, files map[string][]byte) (*types.Packa
 	}
 	var errs []error
 	info := in.newInfo()
-	pkg, _ := in.config(&errs).Check(path, in.fset, astFiles, info)
+	pkg, _ := in.config(&errs, trusted).Check(path, in.fset, astFiles, info)
 	if len(errs) > 0 {
 		delete(in.pkgs, path)
 		return nil, &CheckError{Errors: errs}
@@ -436,7 +475,7 @@ func (in *Interp) RunFiles(ctx context.Context, files map[string][]byte) error {
 }
 
 func (in *Interp) loadSourceMain(files map[string][]byte) (*types.Package, error) {
-	pkg, err := in.loadSource("main", files)
+	pkg, err := in.loadSource("main", files, false)
 	if err != nil {
 		return nil, err
 	}

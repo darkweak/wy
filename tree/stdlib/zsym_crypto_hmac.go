@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	hmac "crypto/hmac"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

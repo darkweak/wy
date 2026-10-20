@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	pkix "crypto/x509/pkix"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

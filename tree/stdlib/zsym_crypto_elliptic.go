@@ -6,8 +6,8 @@ import (
 	"reflect"
 
 	elliptic "crypto/elliptic"
+	"github.com/darkweak/wy/tree/native"
 	big "math/big"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

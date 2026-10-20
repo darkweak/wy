@@ -7,8 +7,8 @@ import (
 	"reflect"
 
 	context "context"
+	"github.com/darkweak/wy/tree/native"
 	slog "log/slog"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

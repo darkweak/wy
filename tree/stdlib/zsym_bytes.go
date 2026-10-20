@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	bytes "bytes"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

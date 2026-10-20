@@ -6,9 +6,9 @@ import (
 	"go/constant"
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	net "net"
 	time "time"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

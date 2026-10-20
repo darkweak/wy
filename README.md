@@ -69,7 +69,8 @@ The tree engine starts in milliseconds.
 ## Install
 
 ```sh
-go install ./cmd/wy      # from this directory
+go install github.com/darkweak/wy/cmd/wy@latest
+go install ./cmd/wy      # or from this directory
 ```
 
 The compiled engine needs a Go toolchain on `PATH` at run time (or
@@ -139,7 +140,7 @@ VERSION_4
 
 ## Embedding
 
-**Compiled engine** (`wy/interp`):
+**Compiled engine** (`github.com/darkweak/wy/interp`):
 
 ```go
 s, _ := interp.New(interp.Options{})
@@ -162,7 +163,7 @@ vals, _ := s.Eval(ctx, `len(orders)`)     // vals[0] == 2
 - `examples/rules` shows a host loading business rules written in Go at run
   time.
 
-**Tree engine** (`wy/tree`):
+**Tree engine** (`github.com/darkweak/wy/tree`):
 
 ```go
 in := tree.New(tree.Options{})
@@ -179,6 +180,19 @@ g := vals[0].(api.Greeter) // the host's own interface, implemented by interpret
   import the generated package in the host.
 - `in.RunSource` runs a program or snippet; `in.RunFiles` runs a main
   package.
+- Source packages are found in the module of `Options.ModuleDir`, then in
+  the `vendor` directories enclosing the importing package, then under
+  `Options.GoPath/src` (GOPATH layout, as Yaegi's `GoPath`).
+- Options keep interpreted code apart from the host, as Yaegi does for
+  embedded use:
+  - `Stdin`, `Stdout` and `Stderr` receive the `fmt.Print`/`Scan`
+    functions, the standard logger, `flag.CommandLine` and the `print`
+    builtins;
+  - `Env` gives the code a private copy of the environment;
+  - `Restricted` makes `os.Exit` and `log.Fatal` panic instead of ending
+    the host process;
+  - `Forbid` lists packages the code may not import, such as `unsafe` and
+    `syscall`.
 
 Both engines return errors as type-check errors with input positions, or as
 a `PanicError` (the session stays usable). If the context is cancelled,
@@ -239,7 +253,12 @@ Several mechanisms make this behave like one evolving program:
   - generated wrappers for every standard interface;
   - 415 combinations of the optional methods that `fmt`, `errors` and the
     encoders probe for (`String`, `Error`, `Unwrap`, `Is`, `As`, `Format`,
-    `MarshalJSON`, ...).
+    `MarshalJSON`, ...);
+  - every combination of the optional methods probed on an
+    `http.ResponseWriter` (`Flush`, `Hijack`, `Push`, `ReadFrom`, `Unwrap`,
+    `CloseNotify`), an `io.Reader` (`WriteTo`) and an `io.Writer`
+    (`ReadFrom`), so streaming and WebSocket upgrades work through an
+    interpreted `ResponseWriter` wrapper.
 
   Compiled code then sees the same methods it would in a compiled program.
   How a value is presented depends on the callee:

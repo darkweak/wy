@@ -5,8 +5,8 @@ package stdlib
 import (
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	quotedprintable "mime/quotedprintable"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

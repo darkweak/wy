@@ -5,8 +5,8 @@ package stdlib
 import (
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	palette "image/color/palette"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

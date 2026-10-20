@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	fips140 "crypto/fips140"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

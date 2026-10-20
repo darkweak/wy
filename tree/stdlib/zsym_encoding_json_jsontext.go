@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	jsontext "encoding/json/jsontext"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

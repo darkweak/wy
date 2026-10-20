@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	gzip "compress/gzip"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

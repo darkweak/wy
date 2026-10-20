@@ -5,8 +5,8 @@ package stdlib
 import (
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	comment "go/doc/comment"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

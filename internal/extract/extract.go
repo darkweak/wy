@@ -1,4 +1,4 @@
-// Package extract generates native symbol tables (see wy/tree/native) for
+// Package extract generates native symbol tables (see github.com/darkweak/wy/tree/native) for
 // compiled packages, so that the tree-walking interpreter can call them.
 // For every exported, non-generic symbol it emits a reflect handle, and for
 // every interface type a wrapper struct that implements it by forwarding to
@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	"wy/internal/gocmd"
+	"github.com/darkweak/wy/internal/gocmd"
 )
 
 // Options configure a generation run.
@@ -55,7 +55,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}
 	if opts.Native == "" {
-		opts.Native = "wy/tree/native"
+		opts.Native = "github.com/darkweak/wy/tree/native"
 	}
 	// Load the packages for every platform; keep the first for generation.
 	var primary map[string]*types.Package

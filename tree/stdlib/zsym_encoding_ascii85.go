@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	ascii85 "encoding/ascii85"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

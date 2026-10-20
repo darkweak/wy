@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	pem "encoding/pem"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

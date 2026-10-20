@@ -5,8 +5,8 @@ package stdlib
 import (
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	debug "runtime/debug"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

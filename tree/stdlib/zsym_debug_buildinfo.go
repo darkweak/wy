@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	buildinfo "debug/buildinfo"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

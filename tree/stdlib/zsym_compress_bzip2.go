@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	bzip2 "compress/bzip2"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	gosym "debug/gosym"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

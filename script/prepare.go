@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"wy/internal/source"
+	"github.com/darkweak/wy/internal/source"
 )
 
 // Prepared is a snippet turned into a complete main package.

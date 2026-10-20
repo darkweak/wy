@@ -2,7 +2,7 @@
 
 // gen regenerates the standard-library symbol tables:
 //
-//	go generate wy/tree/stdlib
+//	go generate github.com/darkweak/wy/tree/stdlib
 //
 // Symbols are intersected across linux, darwin and windows so the tables
 // compile everywhere.
@@ -14,8 +14,8 @@ import (
 	"os"
 	"strings"
 
-	"wy/internal/extract"
-	"wy/internal/gocmd"
+	"github.com/darkweak/wy/internal/extract"
+	"github.com/darkweak/wy/internal/gocmd"
 )
 
 // Packages that are not extracted: internal or platform-specific ones, and

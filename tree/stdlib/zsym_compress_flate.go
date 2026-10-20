@@ -7,8 +7,8 @@ import (
 	"reflect"
 
 	flate "compress/flate"
+	"github.com/darkweak/wy/tree/native"
 	io "io"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

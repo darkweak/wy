@@ -5,10 +5,10 @@ package stdlib
 import (
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	rand "math/rand"
 	reflect2 "reflect"
 	quick "testing/quick"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

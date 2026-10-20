@@ -8,6 +8,7 @@ import (
 	"go/types"
 	"math"
 	"reflect"
+	"sync"
 	"unicode/utf8"
 	"unsafe"
 )
@@ -191,14 +192,9 @@ func (c *compiler) funcRef(o *types.Func, targs []types.Type) eval {
 		}
 	}
 	fn := c.in.funcFor(o, targs)
-	var once reflect.Value
 	in := c.in
-	return func(*frame) reflect.Value {
-		if !once.IsValid() {
-			once = in.funcValue(&closure{fn: fn}, fn.rtOrSig())
-		}
-		return once
-	}
+	once := sync.OnceValue(func() reflect.Value { return in.funcValue(&closure{fn: fn}, fn.rtOrSig()) })
+	return func(*frame) reflect.Value { return once() }
 }
 
 func (f *function) rtOrSig() reflect.Type {
@@ -498,6 +494,12 @@ func (c *compiler) selector(e *ast.SelectorExpr) eval {
 // dereferencing pointers along the way. The result is addressable when the
 // path goes through a pointer or starts from an addressable value.
 func (c *compiler) fieldPath(x eval, t types.Type, path []int) eval {
+	walk := c.fieldWalk(t, path)
+	return func(fr *frame) reflect.Value { return walk(x(fr)) }
+}
+
+// fieldWalk returns the selection of a field path from a value of type t.
+func (c *compiler) fieldWalk(t types.Type, path []int) func(reflect.Value) reflect.Value {
 	type step struct {
 		deref bool
 		off   uintptr
@@ -516,8 +518,7 @@ func (c *compiler) fieldPath(x eval, t types.Type, path []int) eval {
 		steps = append(steps, step{deref, srt.Field(idx).Offset, c.in.rtype(ft)})
 		t = ft
 	}
-	return func(fr *frame) reflect.Value {
-		v := x(fr)
+	return func(v reflect.Value) reflect.Value {
 		for _, s := range steps {
 			if s.deref {
 				v = derefChecked(v)
@@ -578,11 +579,7 @@ func (c *compiler) methodExpr(e *ast.SelectorExpr, sel *types.Selection) eval {
 	recvT := c.subst.typ(sel.Recv())
 	in := c.in
 	m := c.staticMethod(sel, recvT)
-	var once reflect.Value
-	return func(fr *frame) reflect.Value {
-		if once.IsValid() {
-			return once
-		}
+	once := sync.OnceValue(func() reflect.Value {
 		f := in.builtinFunc(sel.Obj().Name(), sig, func(args []reflect.Value) []reflect.Value {
 			if isInterface(recvT) {
 				nt, v := in.dyn(args[0])
@@ -593,9 +590,9 @@ func (c *compiler) methodExpr(e *ast.SelectorExpr, sel *types.Selection) eval {
 			}
 			return in.invoke(m, args[0], args[1:], sig.Variadic(), nil)
 		})
-		once = in.funcValue(&closure{fn: f}, rt)
-		return once
-	}
+		return in.funcValue(&closure{fn: f}, rt)
+	})
+	return func(*frame) reflect.Value { return once() }
 }
 
 // staticMethod resolves a method selection on a concrete type at compile

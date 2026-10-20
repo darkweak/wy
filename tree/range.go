@@ -61,17 +61,14 @@ func (c *compiler) rangeStmt(s *ast.RangeStmt, label string) exec {
 		if s.Tok != token.ASSIGN || s.Key == nil || s.Value == nil || setK == nil || setV == nil {
 			return setK, setV
 		}
-		stK, lk := c.store(s.Key)
-		stV, lv := c.store(s.Value)
-		var pending reflect.Value
-		var kt, vt types.Type = lk, lv
-		_ = kt
-		_ = vt
+		stK, _ := c.store(s.Key)
+		stV, _ := c.store(s.Value)
+		pending := c.fs.newSlot(nil) // per frame: loops run concurrently
 		return func(fr *frame, k reflect.Value) {
-				pending = copyValue(k)
+				fr.vars[pending] = copyValue(k)
 			}, func(fr *frame, v reflect.Value) {
 				setKey, setVal := stK(fr), stV(fr)
-				setKey(pending)
+				setKey(fr.vars[pending])
 				setVal(v)
 			}
 	}

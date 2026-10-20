@@ -5,8 +5,8 @@ package stdlib
 import (
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	jsonrpc "net/rpc/jsonrpc"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

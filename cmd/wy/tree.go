@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"wy/tree"
+	"github.com/darkweak/wy/tree"
 )
 
 // runTree interprets a program or snippet and exits like a compiled

@@ -6,9 +6,9 @@ import (
 	"go/constant"
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	image "image"
 	color "image/color"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

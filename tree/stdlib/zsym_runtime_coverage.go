@@ -5,8 +5,8 @@ package stdlib
 import (
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	coverage "runtime/coverage"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

@@ -6,8 +6,8 @@ import (
 	"go/constant"
 	"reflect"
 
+	"github.com/darkweak/wy/tree/native"
 	filepath "path/filepath"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

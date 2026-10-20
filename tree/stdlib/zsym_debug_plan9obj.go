@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	plan9obj "debug/plan9obj"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

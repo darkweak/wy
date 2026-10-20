@@ -13,8 +13,8 @@ import (
 	"runtime"
 	"strings"
 
-	"wy/internal/gocmd"
-	"wy/script"
+	"github.com/darkweak/wy/internal/gocmd"
+	"github.com/darkweak/wy/script"
 )
 
 const usage = `wy runs Go code on the fly, compiled by the real Go toolchain.

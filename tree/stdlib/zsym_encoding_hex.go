@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	hex "encoding/hex"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

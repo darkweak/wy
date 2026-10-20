@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	md5 "crypto/md5"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

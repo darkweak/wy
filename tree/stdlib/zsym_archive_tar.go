@@ -7,9 +7,9 @@ import (
 	"reflect"
 
 	tar "archive/tar"
+	"github.com/darkweak/wy/tree/native"
 	fs "io/fs"
 	time "time"
-	"wy/tree/native"
 )
 
 var _ reflect.Type

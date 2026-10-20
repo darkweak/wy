@@ -7,7 +7,7 @@ import (
 	"reflect"
 
 	elf "debug/elf"
-	"wy/tree/native"
+	"github.com/darkweak/wy/tree/native"
 )
 
 var _ reflect.Type

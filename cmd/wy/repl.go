@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"wy/internal/source"
-	"wy/interp"
-	"wy/tree"
+	"github.com/darkweak/wy/internal/source"
+	"github.com/darkweak/wy/interp"
+	"github.com/darkweak/wy/tree"
 )
 
 const replHelp = `Enter Go code: declarations, statements or expressions, in any mix.
