@@ -546,6 +546,15 @@ func (c *compiler) conversion(e *ast.CallExpr) eval {
 		}
 	case drt.Kind() == reflect.Pointer && srt.Kind() == reflect.UnsafePointer:
 		elem := drt.Elem()
+		if elem.Kind() == reflect.Slice && c.isStringPtrToUnsafe(e.Args[0]) {
+			return func(fr *frame) reflect.Value {
+				p := x(fr).UnsafePointer()
+				if p == nil {
+					return reflect.Zero(drt)
+				}
+				return stringAsSliceHeader(p, elem)
+			}
+		}
 		return func(fr *frame) reflect.Value {
 			p := x(fr).UnsafePointer()
 			if p == nil {
@@ -609,6 +618,40 @@ func (c *compiler) conversion(e *ast.CallExpr) eval {
 		return func(fr *frame) reflect.Value { return reinterpret(x(fr), drt) }
 	}
 	return func(fr *frame) reflect.Value { return x(fr).Convert(drt) }
+}
+
+// isStringPtrToUnsafe reports whether e is unsafe.Pointer(p) with p a
+// pointer to a string.
+func (c *compiler) isStringPtrToUnsafe(e ast.Expr) bool {
+	call, ok := ast.Unparen(e).(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 || !c.info.Types[call.Fun].IsType() {
+		return false
+	}
+	ptr, ok := c.typeOf(call.Args[0]).Underlying().(*types.Pointer)
+	if !ok {
+		return false
+	}
+	b, ok := ptr.Elem().Underlying().(*types.Basic)
+	return ok && b.Info()&types.IsString != 0
+}
+
+// stringAsSliceHeader returns a pointer to a slice header, of type
+// *sliceType, over the string p points to.
+//
+// *(*[]byte)(unsafe.Pointer(&str)) reads a two-word string header as a
+// three-word slice header (olric's partitions.HKey does it): compiled code
+// takes whatever word follows as the capacity, and so would reading the
+// string in place. Here that word belongs to another allocation, and a
+// capacity below the length makes a later full slice expression such as
+// xxhash's b[0:8:len(b)] panic. Give the slice the capacity of its length,
+// the only value that keeps such programs correct.
+func stringAsSliceHeader(p unsafe.Pointer, sliceType reflect.Type) reflect.Value {
+	str := *(*string)(p)
+	hdr := &struct {
+		Data     unsafe.Pointer
+		Len, Cap int
+	}{unsafe.Pointer(unsafe.StringData(str)), len(str), len(str)}
+	return reflect.NewAt(sliceType, unsafe.Pointer(hdr))
 }
 
 // --- builtins ------------------------------------------------------------
