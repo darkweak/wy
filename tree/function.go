@@ -312,7 +312,18 @@ const (
 	modeDisplay                  // printing (fmt, log): display mirrors
 	modeContainer                // stores and returns values: boxed, identity kept
 	modeEncode                   // encoders: wrappers when Marshal* methods exist
+	modeDecode                   // decoders: like modeEncode, the mirror is copied back
 )
+
+// modeForCall picks the argument mode for the function or method name of
+// the package path.
+func modeForCall(path, name string) argMode {
+	mode := modeForPackage(path)
+	if mode == modeEncode && (strings.HasPrefix(name, "Unmarshal") || strings.HasPrefix(name, "Decode")) {
+		return modeDecode
+	}
+	return mode
+}
 
 // modeForPackage picks the argument mode for functions of a package.
 func modeForPackage(path string) argMode {
@@ -345,6 +356,7 @@ func (in *Interp) callNativeMode(fv reflect.Value, sig *types.Signature, args []
 	}
 	ft := fv.Type()
 	nargs := make([]reflect.Value, len(args))
+	var backs []func() // decoding calls: copy mirrors back
 	for i, a := range args {
 		var want reflect.Type
 		var st types.Type
@@ -377,6 +389,18 @@ func (in *Interp) callNativeMode(fv reflect.Value, sig *types.Signature, args []
 			nargs[i] = cp
 			continue
 		}
+		if (mode == modeEncode || mode == modeDecode) && want.Kind() == reflect.Interface && a.Kind() == reflect.Interface &&
+			!a.IsNil() && a.Elem().Type() == boxedRT {
+			b := a.Elem().Interface().(boxed)
+			if m, back, ok := in.jsonMirrorArg(boxValue(b), b.t.t, mode == modeDecode); ok {
+				nargs[i] = reflect.New(want).Elem()
+				nargs[i].Set(m)
+				if back != nil {
+					backs = append(backs, back)
+				}
+				continue
+			}
+		}
 		nargs[i] = in.toNativeMode(a, st, want, mode)
 	}
 	var res []reflect.Value
@@ -384,6 +408,9 @@ func (in *Interp) callNativeMode(fv reflect.Value, sig *types.Signature, args []
 		res = fv.CallSlice(nargs)
 	} else {
 		res = fv.Call(nargs)
+	}
+	for _, back := range backs {
+		back()
 	}
 	for i, r := range res {
 		res[i] = in.fromNative(r, sig.Results().At(i).Type())

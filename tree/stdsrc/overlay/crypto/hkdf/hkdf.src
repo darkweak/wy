@@ -1,0 +1,85 @@
+// Generic functions of package crypto/hkdf, interpreted from source. Adapted
+// from GOROOT/src/crypto/hkdf/hkdf.go and crypto/internal/fips140/hkdf. In
+// FIPS 140-only mode, the key length is checked but not the hash function.
+package hkdf
+
+import (
+	"crypto/fips140"
+	"crypto/hmac"
+	"errors"
+	"hash"
+)
+
+// Extract generates a pseudorandom key for use with [Expand] from an input
+// secret and an optional independent salt.
+func Extract[H hash.Hash](h func() H, secret, salt []byte) ([]byte, error) {
+	if err := checkFIPS140Only(secret); err != nil {
+		return nil, err
+	}
+	return extract(h, secret, salt), nil
+}
+
+// Expand derives a key from the given hash, key, and optional context info,
+// returning a []byte of length keyLength that can be used as cryptographic
+// key.
+func Expand[H hash.Hash](h func() H, pseudorandomKey []byte, info string, keyLength int) ([]byte, error) {
+	if err := checkFIPS140Only(pseudorandomKey); err != nil {
+		return nil, err
+	}
+	if keyLength > h().Size()*255 {
+		return nil, errors.New("hkdf: requested key length too large")
+	}
+	return expand(h, pseudorandomKey, info, keyLength), nil
+}
+
+// Key derives a key from the given hash, secret, salt and context info,
+// returning a []byte of length keyLength that can be used as cryptographic
+// key.
+func Key[Hash hash.Hash](h func() Hash, secret, salt []byte, info string, keyLength int) ([]byte, error) {
+	if err := checkFIPS140Only(secret); err != nil {
+		return nil, err
+	}
+	if keyLength > h().Size()*255 {
+		return nil, errors.New("hkdf: requested key length too large")
+	}
+	return expand(h, extract(h, secret, salt), info, keyLength), nil
+}
+
+func checkFIPS140Only(key []byte) error {
+	if fips140.Enforced() && len(key) < 112/8 {
+		return errors.New("crypto/hkdf: use of keys shorter than 112 bits is not allowed in FIPS 140-only mode")
+	}
+	return nil
+}
+
+func extract[H hash.Hash](h func() H, secret, salt []byte) []byte {
+	if salt == nil {
+		salt = make([]byte, h().Size())
+	}
+	extractor := hmac.New(func() hash.Hash { return h() }, salt)
+	extractor.Write(secret)
+	return extractor.Sum(nil)
+}
+
+func expand[H hash.Hash](h func() H, pseudorandomKey []byte, info string, keyLen int) []byte {
+	out := make([]byte, 0, keyLen)
+	expander := hmac.New(func() hash.Hash { return h() }, pseudorandomKey)
+	var counter uint8
+	var buf []byte
+	for len(out) < keyLen {
+		counter++
+		if counter == 0 {
+			panic("hkdf: counter overflow")
+		}
+		if counter > 1 {
+			expander.Reset()
+		}
+		expander.Write(buf)
+		expander.Write([]byte(info))
+		expander.Write([]byte{counter})
+		buf = expander.Sum(buf[:0])
+		remain := min(keyLen-len(out), len(buf))
+		out = append(out, buf[:remain]...)
+	}
+	return out
+}

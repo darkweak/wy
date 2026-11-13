@@ -73,7 +73,7 @@ func intrinsicFor(in *Interp, fn *types.Func) *function {
 			return []reflect.Value{in.ifaceFrom(nt, c, anyRT)}
 		}}
 	}
-	return nil
+	return in.hostFunc(fn)
 }
 
 // errorsAs is errors.As with interpreter types: the target's element type

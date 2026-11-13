@@ -22,3 +22,10 @@ func Float(s string) constant.Value {
 	}
 	return constant.MakeFromLiteral(s, token.FLOAT, 0)
 }
+
+// Wide returns hi<<32 + lo: generated code passes the halves of an integer
+// constant that is negative on some platforms and does not fit int64 on
+// others.
+func Wide(hi, lo int64) constant.Value {
+	return constant.BinaryOp(constant.Shift(constant.MakeInt64(hi), token.SHL, 32), token.ADD, constant.MakeInt64(lo))
+}

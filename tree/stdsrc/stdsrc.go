@@ -1,6 +1,8 @@
 // Package stdsrc embeds the source of standard packages that consist of
 // generic code, which the tree-walking interpreter runs from source
-// (generic functions cannot be called through reflection).
+// (generic functions cannot be called through reflection), that have no
+// exported functions to extract (structs), or whose compiled package the
+// host must not link (plugin, as its no-cgo stub).
 package stdsrc
 
 import (
@@ -10,7 +12,7 @@ import (
 	"strings"
 )
 
-//go:embed cmp slices maps iter overlay
+//go:embed cmp slices maps iter overlay plugin structs unique weak
 var files embed.FS
 
 // Overlay returns source files adding generic declarations to a compiled

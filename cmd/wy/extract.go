@@ -16,7 +16,9 @@ func extractCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("extract", flag.ContinueOnError)
 	out := fs.String("o", "wysyms", "output directory")
 	pkg := fs.String("pkg", "wysyms", "package name of the generated files")
-	goos := fs.String("goos", "", "comma-separated platforms whose common API is extracted (default: current)")
+	goos := fs.String("goos", "", "comma-separated platforms (goos or goos/goarch) whose common API is extracted (default: current)")
+	build := fs.String("build", "", "//go:build expression of the generated files")
+	suffix := fs.String("suffix", "", "suffix of the generated file names, such as _linux")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -34,6 +36,8 @@ func extractCmd(ctx context.Context, args []string) error {
 		OutDir:   *out,
 		PkgName:  *pkg,
 		GOOS:     platforms,
+		Build:    *build,
+		Suffix:   *suffix,
 		Dir:      ".",
 		Log:      os.Stderr,
 	})

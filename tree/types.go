@@ -7,7 +7,9 @@ import (
 	"go/token"
 	"go/types"
 	"reflect"
+	"strconv"
 	"strings"
+	"unicode"
 	"unsafe"
 
 	"github.com/darkweak/wy/internal/source"
@@ -62,11 +64,34 @@ type rtypes struct {
 	cache      map[types.Type]reflect.Type
 	named      map[*types.Named]reflect.Type
 	inProgress map[*types.Named]bool
+	// byRT indexes the interpreted named types by their reflect type.
+	byRT map[reflect.Type][]*types.Named
+	// instances maps a generic type to its distinct instances: go/types may
+	// create several *types.Named for one instance (once per package that
+	// instantiates it), which must share one reflect type.
+	instances map[*types.Named][]*types.Named
 }
 
 func newRtypes(in *Interp) *rtypes {
 	return &rtypes{in: in, cache: map[types.Type]reflect.Type{}, named: map[*types.Named]reflect.Type{},
-		inProgress: map[*types.Named]bool{}}
+		inProgress: map[*types.Named]bool{}, byRT: map[reflect.Type][]*types.Named{},
+		instances: map[*types.Named][]*types.Named{}}
+}
+
+// canonical returns the *types.Named standing for every instance identical
+// to t, or t itself if it is not an instance.
+func (r *rtypes) canonical(t *types.Named) *types.Named {
+	if t.TypeArgs().Len() == 0 {
+		return t
+	}
+	origin := t.Origin()
+	for _, c := range r.instances[origin] {
+		if c == t || types.Identical(c, t) {
+			return c
+		}
+	}
+	r.instances[origin] = append(r.instances[origin], t)
+	return t
 }
 
 // rtype returns the canonical reflect type of t.
@@ -225,20 +250,50 @@ func (r *rtypes) get(t types.Type) (rt reflect.Type, err error) {
 			if !token.IsExported(name) {
 				sf.PkgPath = "wy/" + pkgPathOf(f.Pkg())
 			}
-			if f.Embedded() && token.IsExported(name) && ft.Kind() != reflect.UnsafePointer && ft != sliceHdrRT {
-				sf.Anonymous = true
+			if f.Embedded() && ft.Kind() != reflect.UnsafePointer && ft != sliceHdrRT {
+				if token.IsExported(name) {
+					sf.Anonymous = true
+				} else if exported := embeddedStructName(t, name, ft); exported != "" {
+					// reflect cannot embed under an unexported name, but
+					// encoding/json (and other reflection walkers) promote
+					// the fields of an embedded unexported struct. The
+					// struct type is unnamed, so an exported name only
+					// changes what reflection reports as the field name.
+					sf.Name, sf.PkgPath, sf.Anonymous = exported, "", true
+				}
 			}
 			fields[i] = sf
 		}
 		// A struct is complete even if fields stand in for types being
 		// built: those fields are reinterpreted on access.
-		return reflect.StructOf(fields), nil
+		return structOf(fields), nil
 	case *types.TypeParam:
 		return nil, fmt.Errorf("unsubstituted type parameter %s", t)
 	case *types.Tuple:
 		return nil, fmt.Errorf("tuple type")
 	}
 	return nil, fmt.Errorf("unsupported type %T", t)
+}
+
+// embeddedStructName returns the exported name an embedded field of the
+// unexported struct type ft can take in st's reflect type, or "" if it
+// should stay a regular unexported field.
+func embeddedStructName(st *types.Struct, name string, ft reflect.Type) string {
+	if ft.Kind() != reflect.Struct {
+		return ""
+	}
+	r := []rune(name)
+	r[0] = unicode.ToUpper(r[0])
+	exported := string(r)
+	if !token.IsExported(exported) {
+		return ""
+	}
+	for i := 0; i < st.NumFields(); i++ {
+		if st.Field(i).Name() == exported {
+			return ""
+		}
+	}
+	return exported
 }
 
 func pkgPathOf(p *types.Package) string {
@@ -251,6 +306,13 @@ func pkgPathOf(p *types.Package) string {
 func (r *rtypes) namedType(t *types.Named) (reflect.Type, error) {
 	if rt, ok := r.named[t]; ok {
 		return rt, nil
+	}
+	if c := r.canonical(t); c != t {
+		rt, err := r.namedType(c)
+		if err == nil {
+			r.named[t] = rt
+		}
+		return rt, err
 	}
 	if rt := r.in.natives.reflectOf(t); rt != nil {
 		r.named[t] = rt
@@ -275,8 +337,34 @@ func (r *rtypes) namedType(t *types.Named) (reflect.Type, error) {
 		// Part of a larger cycle still being built: valid, not final.
 		return rt, errCycle
 	}
+	rt = distinctStruct(t, rt)
 	r.named[t] = rt
+	r.byRT[rt] = append(r.byRT[rt], t)
 	return rt, nil
+}
+
+// distinctStruct gives the reflect type rt of the interpreted named struct
+// type t a "wy" tag naming t on its first field. Otherwise two named types
+// with the same fields would share one reflect type, which libraries that
+// cache by reflect type (protobuf, encoding/json) take for one Go type. The
+// tag changes neither the layout nor the other tag keys, and reflect ignores
+// tags in struct conversions.
+func distinctStruct(t *types.Named, rt reflect.Type) reflect.Type {
+	if rt.Kind() != reflect.Struct || rt.NumField() == 0 {
+		return rt
+	}
+	fields := make([]reflect.StructField, rt.NumField())
+	for i := range fields {
+		f := rt.Field(i)
+		fields[i] = reflect.StructField{Name: f.Name, PkgPath: f.PkgPath, Type: f.Type, Tag: f.Tag, Anonymous: f.Anonymous}
+	}
+	mark := `wy:` + strconv.Quote(types.TypeString(t, nil))
+	if fields[0].Tag == "" {
+		fields[0].Tag = reflect.StructTag(mark)
+	} else {
+		fields[0].Tag += reflect.StructTag(" " + mark)
+	}
+	return structOf(fields)
 }
 
 // dependsOnOther reports whether another named type is still being built
@@ -556,4 +644,49 @@ func viewer(storage, canonical reflect.Type) func(reflect.Value) reflect.Value {
 		return nil
 	}
 	return func(v reflect.Value) reflect.Value { return reinterpret(v, canonical) }
+}
+
+// structOf is reflect.StructOf, which does not implement some embedded
+// fields whose types have methods: those fields are then declared as named
+// fields. The interpreter resolves promoted fields and methods itself, so
+// only reflection sees the difference (encoding/json, for instance, no
+// longer inlines them). Fields keep being embedded when reflect allows it:
+// first all of them, then those whose types (or pointer element types)
+// have no exported methods, then interfaces only, then none.
+func structOf(fields []reflect.StructField) reflect.Type {
+	if rt, ok := tryStructOf(fields); ok {
+		return rt
+	}
+	keeps := []func(reflect.Type) bool{
+		func(ft reflect.Type) bool {
+			return ft.Kind() == reflect.Interface || ft.NumMethod() == 0 && reflect.PointerTo(ft).NumMethod() == 0
+		},
+		func(ft reflect.Type) bool { return ft.Kind() == reflect.Interface },
+		func(reflect.Type) bool { return false },
+	}
+	for i, keep := range keeps {
+		reduced := make([]reflect.StructField, len(fields))
+		for j, f := range fields {
+			if f.Anonymous && !keep(f.Type) {
+				f.Anonymous = false
+			}
+			reduced[j] = f
+		}
+		if i == len(keeps)-1 {
+			return reflect.StructOf(reduced)
+		}
+		if rt, ok := tryStructOf(reduced); ok {
+			return rt
+		}
+	}
+	panic("unreachable")
+}
+
+func tryStructOf(fields []reflect.StructField) (rt reflect.Type, ok bool) {
+	defer func() {
+		if recover() != nil {
+			rt, ok = nil, false
+		}
+	}()
+	return reflect.StructOf(fields), true
 }

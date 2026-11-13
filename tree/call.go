@@ -359,9 +359,20 @@ func (c *compiler) callee(fun ast.Expr) callee {
 							return callee{sig: sig, bind: b}
 						}
 						in := c.in
-						mode := modeForPackage(o.Pkg().Path())
+						mode := modeForCall(o.Pkg().Path(), o.Name())
 						inv := func(args []reflect.Value, spread bool, _ *frame) []reflect.Value {
 							return in.callNativeMode(fv, sig, args, spread, mode)
+						}
+						if o.Pkg().Path() == "reflect" && o.Name() == "TypeOf" {
+							base := inv
+							inv = func(args []reflect.Value, spread bool, fr *frame) []reflect.Value {
+								if len(args) == 1 {
+									if rt, ok := in.reflectTypeOf(args[0]); ok {
+										return []reflect.Value{rt}
+									}
+								}
+								return base(args, spread, fr)
+							}
 						}
 						return callee{sig: sig, bind: func(*frame) func([]reflect.Value, bool, *frame) []reflect.Value { return inv }}
 					}
@@ -431,6 +442,7 @@ func (c *compiler) methodCaller(e *ast.SelectorExpr, sel *types.Selection) metho
 		if len(path) == 1 {
 			_, ptrDeref = recvT.Underlying().(*types.Pointer)
 		}
+		relation := isReflectTypeRelation(recvT, name)
 		return methodCall{bind: func(fr *frame) func([]reflect.Value, bool, *frame) []reflect.Value {
 			iv := x(fr)
 			if ptrDeref {
@@ -441,6 +453,11 @@ func (c *compiler) methodCaller(e *ast.SelectorExpr, sel *types.Selection) metho
 				panic(runtimeError("invalid memory address or nil pointer dereference"))
 			}
 			return func(args []reflect.Value, spread bool, deferOf *frame) []reflect.Value {
+				if relation {
+					if r, ok := in.reflectTypeRelation(name, v, args); ok {
+						return []reflect.Value{r}
+					}
+				}
 				m := nt.method(name, pkg)
 				if m == nil {
 					panic(fmt.Sprintf("wy: %s has no method %s", nt.name, name))

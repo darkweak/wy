@@ -20,6 +20,7 @@
 package tree
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -64,7 +65,8 @@ type Options struct {
 	// Restricted keeps interpreted code from ending or signalling the host
 	// process: os.Exit panics with an *ExitError (which interpreted code
 	// cannot recover), the standard logger's Fatal functions panic like
-	// Panic, and os.FindProcess refuses the host process.
+	// Panic, and os.FindProcess refuses the host process. Handlers
+	// registered on http.DefaultServeMux go to a mux of the interpreter.
 	Restricted bool
 	// Stdin is read by the fmt.Scan functions, and is os.Stdin for
 	// interpreted code if it is an *os.File. Default: os.Stdin.
@@ -89,10 +91,21 @@ type Interp struct {
 
 	rtMu sync.Mutex
 	rts  *rtypes
+	// ifaceTokens: reflection tokens of interpreted interfaces.
+	ifaceTokens ifaceTokens
+	// jsonMirrors: mirror types of values given to compiled encoders.
+	jsonMirrors jsonMirrors
 
-	loadMu    sync.Mutex // serializes package loading and evaluation
-	mu        sync.Mutex // guards compilation (never held while running code)
-	pkgs      map[string]*types.Package
+	loadMu sync.Mutex // serializes package loading and evaluation
+	mu     sync.Mutex // guards compilation (never held while running code)
+	pkgs   map[string]*types.Package
+	// failed remembers source packages that did not type-check, so that a
+	// broken dependency is reported once instead of being re-checked from
+	// every importer.
+	failed map[string]error
+	// linknames maps source functions without a body to the symbol their
+	// //go:linkname directive pulls in.
+	linknames map[*types.Func]string
 	src       map[string]*srcPkg
 	globals   map[types.Object]reflect.Value
 	funcDecls map[*types.Func]*funcDecl
@@ -129,6 +142,8 @@ func New(opts Options) *Interp {
 		tctx:      types.NewContext(),
 		sizes:     types.SizesFor("gc", runtime.GOARCH),
 		pkgs:      map[string]*types.Package{},
+		failed:    map[string]error{},
+		linknames: map[*types.Func]string{},
 		src:       map[string]*srcPkg{},
 		globals:   map[types.Object]reflect.Value{},
 		funcDecls: map[*types.Func]*funcDecl{},
@@ -190,6 +205,9 @@ func (in *Interp) importPkg(path, fromDir string) (*types.Package, error) {
 	if path == "unsafe" {
 		return types.Unsafe, nil
 	}
+	if err, ok := in.failed[path]; ok {
+		return nil, err
+	}
 	if p, ok := in.pkgs[path]; ok {
 		if p == nil {
 			return nil, fmt.Errorf("import cycle through %s", path)
@@ -238,6 +256,9 @@ func readPackageDir(dir string) (map[string][]byte, error) {
 		return nil, err
 	}
 	ctx := build.Default
+	// Assembly cannot be interpreted: select the pure Go implementations
+	// that packages provide under these conventional tags.
+	ctx.BuildTags = append(ctx.BuildTags[:len(ctx.BuildTags):len(ctx.BuildTags)], "purego", "noasm")
 	files := map[string][]byte{}
 	for _, e := range entries {
 		name := e.Name()
@@ -296,10 +317,18 @@ func (in *Interp) loadSource(path string, files map[string][]byte, trusted bool)
 	sort.Strings(names)
 	var astFiles []*ast.File
 	for _, n := range names {
-		f, err := parser.ParseFile(in.fset, n, files[n], parser.SkipObjectResolution)
+		mode := parser.SkipObjectResolution
+		if !trusted && (bytes.Contains(files[n], []byte("//go:embed ")) || bytes.Contains(files[n], []byte("//go:linkname "))) {
+			mode |= parser.ParseComments
+		}
+		f, err := parser.ParseFile(in.fset, n, files[n], mode)
 		if err != nil {
-			delete(in.pkgs, path)
-			return nil, err
+			return nil, in.loadFailed(path, err)
+		}
+		if !trusted {
+			if err := applyEmbeds(filepath.Dir(n), f); err != nil {
+				return nil, in.loadFailed(path, err)
+			}
 		}
 		astFiles = append(astFiles, f)
 	}
@@ -307,17 +336,36 @@ func (in *Interp) loadSource(path string, files map[string][]byte, trusted bool)
 	info := in.newInfo()
 	pkg, _ := in.config(&errs, trusted).Check(path, in.fset, astFiles, info)
 	if len(errs) > 0 {
-		delete(in.pkgs, path)
-		return nil, &CheckError{Errors: errs}
+		return nil, in.loadFailed(path, &CheckError{Errors: errs})
 	}
 	in.pkgs[path] = pkg
+	in.collectLinknames(pkg, astFiles)
 	sp := &srcPkg{path: path, pkg: pkg, info: info, files: astFiles}
 	in.src[path] = sp
 	in.registerDecls(sp, astFiles)
 	if err := in.initPackage(sp, astFiles); err != nil {
-		return nil, err
+		delete(in.src, path)
+		return nil, in.loadFailed(path, err)
 	}
 	return pkg, nil
+}
+
+// loadFailed drops the cycle marker of path and returns err as its importers
+// see it: only the first error, since go/types embeds the importer error in
+// every importing package's own error, which would otherwise grow with each
+// level of the import graph. It is cached, except for the "main" package that
+// each Eval re-checks and whose errors are returned in full.
+func (in *Interp) loadFailed(path string, err error) error {
+	delete(in.pkgs, path)
+	if path == "main" {
+		return err
+	}
+	var ce *CheckError
+	if errors.As(err, &ce) && len(ce.Errors) > 1 {
+		err = fmt.Errorf("%w (and %d more errors)", ce.Errors[0], len(ce.Errors)-1)
+	}
+	in.failed[path] = err
+	return err
 }
 
 func (in *Interp) registerDecls(sp *srcPkg, files []*ast.File) {

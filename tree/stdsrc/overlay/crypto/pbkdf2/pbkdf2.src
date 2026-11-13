@@ -1,0 +1,60 @@
+// Generic functions of package crypto/pbkdf2, interpreted from source.
+// Adapted from GOROOT/src/crypto/pbkdf2/pbkdf2.go and
+// crypto/internal/fips140/pbkdf2. In FIPS 140-only mode, the key and salt
+// lengths are checked but not the hash function.
+package pbkdf2
+
+import (
+	"crypto/fips140"
+	"crypto/hmac"
+	"errors"
+	"hash"
+)
+
+// Key derives a key from the password, salt and iteration count, returning a
+// []byte of length keyLength that can be used as cryptographic key.
+func Key[Hash hash.Hash](h func() Hash, password string, salt []byte, iter, keyLength int) ([]byte, error) {
+	if fips140.Enforced() {
+		if keyLength < 112/8 {
+			return nil, errors.New("crypto/pbkdf2: use of keys shorter than 112 bits is not allowed in FIPS 140-only mode")
+		}
+		if len(salt) < 128/8 {
+			return nil, errors.New("crypto/pbkdf2: use of salts shorter than 128 bits is not allowed in FIPS 140-only mode")
+		}
+	}
+	if keyLength <= 0 {
+		return nil, errors.New("pbkdf2: keyLength must be larger than 0")
+	}
+	prf := hmac.New(func() hash.Hash { return h() }, []byte(password))
+	hashLen := prf.Size()
+	numBlocks := int((int64(keyLength) + int64(hashLen) - 1) / int64(hashLen))
+	const maxBlocks = int64(1<<32 - 1)
+	if keyLength+hashLen < keyLength || int64(numBlocks) > maxBlocks {
+		return nil, errors.New("pbkdf2: keyLength too long")
+	}
+	var buf [4]byte
+	dk := make([]byte, 0, numBlocks*hashLen)
+	U := make([]byte, hashLen)
+	for block := 1; block <= numBlocks; block++ {
+		prf.Reset()
+		prf.Write(salt)
+		buf[0] = byte(block >> 24)
+		buf[1] = byte(block >> 16)
+		buf[2] = byte(block >> 8)
+		buf[3] = byte(block)
+		prf.Write(buf[:4])
+		dk = prf.Sum(dk)
+		T := dk[len(dk)-hashLen:]
+		copy(U, T)
+		for n := 2; n <= iter; n++ {
+			prf.Reset()
+			prf.Write(U)
+			U = U[:0]
+			U = prf.Sum(U)
+			for x := range U {
+				T[x] ^= U[x]
+			}
+		}
+	}
+	return dk[:keyLength], nil
+}
