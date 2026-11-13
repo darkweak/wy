@@ -1,0 +1,28 @@
+// Generic functions of package encoding/json/jsontext, interpreted from
+// source. They call the host's instantiation for strings.
+package jsontext
+
+import real "encoding/json/jsontext"
+
+// AppendQuote appends a double-quoted JSON string literal representing src
+// to dst and returns the extended buffer.
+func AppendQuote[Bytes ~[]byte | ~string](dst []byte, src Bytes) ([]byte, error) {
+	return appendQuote(dst, string(src))
+}
+
+// AppendUnquote appends the decoded interpretation of src as a
+// double-quoted JSON string literal to dst and returns the extended buffer.
+func AppendUnquote[Bytes ~[]byte | ~string](dst []byte, src Bytes) ([]byte, error) {
+	return appendUnquote(dst, string(src))
+}
+
+// AppendFormat formats the JSON value in src and appends it to dst according
+// to the specified options.
+func AppendFormat[Bytes ~[]byte | ~string](dst []byte, src Bytes, opts ...real.Options) ([]byte, error) {
+	return appendFormat(dst, string(src), opts)
+}
+
+// Implemented by the host.
+func appendQuote(dst []byte, src string) ([]byte, error)
+func appendUnquote(dst []byte, src string) ([]byte, error)
+func appendFormat(dst []byte, src string, opts []real.Options) ([]byte, error)

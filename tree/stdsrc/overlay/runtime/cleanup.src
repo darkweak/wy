@@ -1,0 +1,27 @@
+// Generic functions of package runtime, interpreted from source. The cleanup
+// is registered by the host's runtime.AddCleanup.
+package runtime
+
+import (
+	real "runtime"
+	"unsafe"
+)
+
+// AddCleanup attaches a cleanup function to ptr. Some time after ptr is no
+// longer reachable, the runtime will call cleanup(arg) in a separate
+// goroutine.
+func AddCleanup[T, S any](ptr *T, cleanup func(S), arg S) real.Cleanup {
+	if ptr == nil {
+		panic("runtime.AddCleanup: ptr is nil")
+	}
+	return addCleanup(unsafe.Pointer(ptr), func(a any) {
+		var s S
+		if a != nil {
+			s = a.(S)
+		}
+		cleanup(s)
+	}, arg)
+}
+
+// Implemented by the host.
+func addCleanup(ptr unsafe.Pointer, cleanup func(any), arg any) real.Cleanup

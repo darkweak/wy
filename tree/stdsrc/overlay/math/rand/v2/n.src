@@ -1,0 +1,17 @@
+// Generic functions of package math/rand/v2, interpreted from source.
+package rand
+
+import real "math/rand/v2"
+
+type intType interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
+}
+
+// N returns a pseudo-random number in the half-open interval [0,n) from the
+// default Source. It panics if n <= 0.
+func N[Int intType](n Int) Int {
+	if n <= 0 {
+		panic("invalid argument to N")
+	}
+	return Int(real.Uint64N(uint64(n)))
+}

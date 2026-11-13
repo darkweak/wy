@@ -3,6 +3,7 @@ package extract
 import (
 	"bytes"
 	"context"
+	"go/constant"
 	"go/parser"
 	"go/token"
 	"go/types"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/darkweak/wy/internal/gocmd"
+	"github.com/darkweak/wy/tree/native"
 )
 
 const samplePath = "example.com/sample"
@@ -271,3 +273,76 @@ func TestImportAliases(t *testing.T) {
 }
 
 func newPkg(path, name string) *types.Package { return types.NewPackage(path, name) }
+
+// TestPlatformFiles checks goos/goarch platforms and the per-platform file
+// options: SYS_OPEN exists on linux/amd64 but not on linux/arm64.
+func TestPlatformFiles(t *testing.T) {
+	gen := func(platforms ...string) string {
+		out := t.TempDir()
+		err := Run(context.Background(), Options{
+			Packages: []string{"syscall"},
+			OutDir:   out,
+			PkgName:  "wysyms",
+			GOOS:     platforms,
+			Build:    "linux",
+			Suffix:   "_linux",
+			Dir:      ".",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(out, "zsym_syscall_linux.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "\n//go:build linux\n\npackage wysyms\n") {
+			t.Errorf("missing build constraint:\n%.200s", data)
+		}
+		return string(data)
+	}
+	if src := gen("linux/amd64"); !strings.Contains(src, `"SYS_OPEN"`) || !strings.Contains(src, `"Rlimit"`) {
+		t.Error("linux/amd64 table lacks SYS_OPEN or Rlimit")
+	}
+	if src := gen("linux/amd64", "linux/arm64"); strings.Contains(src, `"SYS_OPEN"`) || !strings.Contains(src, `"Rlimit"`) {
+		t.Error("linux/amd64+arm64 table has SYS_OPEN or lacks Rlimit")
+	}
+}
+
+// TestWideConstants checks that an integer constant whose value differs
+// between platforms is read in a form valid on all of them: SIOCSPGRP does
+// not fit int64 on aix and is negative on solaris, TIOCFLUSH only differs in
+// magnitude.
+func TestWideConstants(t *testing.T) {
+	out := t.TempDir()
+	err := Run(context.Background(), Options{
+		Packages: []string{"syscall"},
+		OutDir:   out,
+		PkgName:  "wysyms",
+		GOOS:     []string{"netbsd/amd64", "aix/ppc64", "solaris/amd64"},
+		Dir:      ".",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(out, "zsym_syscall.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"native.Wide(int64(syscall.SIOCSPGRP>>32), int64(syscall.SIOCSPGRP&0xffffffff))",
+		"constant.MakeUint64(uint64(syscall.TIOCFLUSH))",
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("generated code lacks %s", want)
+		}
+	}
+	for _, v := range []int64{-2147192064, 0x8020690c, 0x7fffffffffffffff, -1 << 63} {
+		if got, _ := constant.Int64Val(native.Wide(v>>32, v&0xffffffff)); got != v {
+			t.Errorf("Wide halves of %d = %d", v, got)
+		}
+	}
+	u := uint64(0xffffffff8020690c)
+	if got, _ := constant.Uint64Val(native.Wide(int64(u>>32), int64(u&0xffffffff))); got != u {
+		t.Errorf("Wide halves of %#x = %#x", u, got)
+	}
+}

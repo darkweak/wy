@@ -1,0 +1,24 @@
+// Package unique, interpreted from source. Values are canonicalized by the
+// host's unique.Make on the value boxed in an interface, which keeps the
+// interpreted type: Make[int](1) and Make[myInt](1) differ.
+package unique
+
+import "unsafe"
+
+// Handle is a globally unique identity for some value of type T.
+type Handle[T comparable] struct {
+	value unsafe.Pointer // *any holding the canonical value
+}
+
+// Value returns a shallow copy of the T value that produced the Handle.
+func (h Handle[T]) Value() T {
+	return (*(*any)(h.value)).(T)
+}
+
+// Make returns a globally unique handle for a value of type T.
+func Make[T comparable](value T) Handle[T] {
+	return Handle[T]{makeHandle(value)}
+}
+
+// Implemented by the host.
+func makeHandle(v any) unsafe.Pointer

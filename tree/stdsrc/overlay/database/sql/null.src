@@ -1,0 +1,54 @@
+// Generic types of package database/sql, interpreted from source. Adapted
+// from GOROOT/src/database/sql/sql.go.
+package sql
+
+import (
+	"database/sql/driver"
+	real "database/sql"
+	"reflect"
+)
+
+// Null represents a value that may be null.
+type Null[T any] struct {
+	V     T
+	Valid bool
+}
+
+// Scan implements the [Scanner] interface.
+func (n *Null[T]) Scan(value any) error {
+	if value == nil {
+		n.V, n.Valid = *new(T), false
+		return nil
+	}
+	err := real.ConvertAssign(driver.ScanContext{}, &n.V, value)
+	n.Valid = err == nil
+	return err
+}
+
+// Value implements the [driver.Valuer] interface.
+func (n Null[T]) Value() (driver.Value, error) {
+	if !n.Valid {
+		return nil, nil
+	}
+	v := any(n.V)
+	if valuer, ok := v.(driver.Valuer); ok {
+		val, err := callValuerValue(valuer)
+		if err != nil {
+			return val, err
+		}
+		v = val
+	}
+	return driver.DefaultParameterConverter.ConvertValue(v)
+}
+
+// callValuerValue returns vr.Value(), with one exception: if vr.Value is an
+// auto-generated method on a pointer type and the pointer is nil, it returns
+// nil, nil instead of panicking.
+func callValuerValue(vr driver.Valuer) (driver.Value, error) {
+	if rv := reflect.ValueOf(vr); rv.Kind() == reflect.Pointer &&
+		rv.IsNil() &&
+		rv.Type().Elem().Implements(reflect.TypeFor[driver.Valuer]()) {
+		return nil, nil
+	}
+	return vr.Value()
+}

@@ -136,6 +136,45 @@ func (in *Interp) dyn(iv reflect.Value) (*ntype, reflect.Value) {
 	return in.dynOf(iv.Elem())
 }
 
+// recoverNamed returns the interpreted type of e, a value that reflection
+// made outside the interpreter (reflect.New, Value.Interface): its dynamic
+// type nt is then just its reflect type, without the interpreted type's name
+// and methods. It is the one interpreted named struct type, or pointer to
+// one, with e's reflect type for which match holds, or nil. Other kinds are
+// not recovered: a plain float64 must not become an interpreted type defined
+// as float64, while a struct's reflect type carries its exact fields and
+// tags.
+func (in *Interp) recoverNamed(nt *ntype, e reflect.Value, match func(*ntype) bool) *ntype {
+	if !nt.faithful {
+		return nil // e came with its interpreted type
+	}
+	rt := e.Type()
+	if rt.Kind() != reflect.Struct && (rt.Kind() != reflect.Pointer || rt.Elem().Kind() != reflect.Struct) {
+		return nil
+	}
+	in.rtMu.Lock()
+	var cands []types.Type
+	for _, n := range in.rts.byRT[rt] {
+		cands = append(cands, n)
+	}
+	if rt.Kind() == reflect.Pointer {
+		for _, n := range in.rts.byRT[rt.Elem()] {
+			cands = append(cands, types.NewPointer(n))
+		}
+	}
+	in.rtMu.Unlock()
+	var found *ntype
+	for _, t := range cands {
+		if c := in.ntypes.get(t); match(c) {
+			if found != nil && found != c {
+				return nil // ambiguous
+			}
+			found = c
+		}
+	}
+	return found
+}
+
 func (in *Interp) dynOf(e reflect.Value) (*ntype, reflect.Value) {
 	if e.Type() == boxedRT {
 		b := e.Interface().(boxed)
@@ -308,7 +347,7 @@ func (in *Interp) invokeRecv(m *methodImpl, recv reflect.Value, args []reflect.V
 	}
 	mode := modeRaw
 	if p := m.sel.Obj().Pkg(); p != nil {
-		mode = modeForPackage(p.Path())
+		mode = modeForCall(p.Path(), name)
 	}
 	return in.callNativeMode(mv, m.sig, args, spread, mode)
 }
@@ -606,7 +645,7 @@ func (in *Interp) boxToNativeMode(b boxed, target reflect.Type, mode argMode) re
 			return newWrapper(wt, b)
 		}
 		return reflect.ValueOf(b)
-	case modeEncode:
+	case modeEncode, modeDecode:
 		if wt := b.t.comboType(); wt != nil {
 			for _, m := range []string{"MarshalJSON", "MarshalText"} {
 				if _, ok := wt.MethodByName(m); ok {
@@ -786,7 +825,12 @@ func (b boxed) Format(f fmt.State, verb rune) {
 }
 
 // MarshalJSON makes a boxed value encode like the value itself.
-func (b boxed) MarshalJSON() ([]byte, error) { return json.Marshal(b.v) }
+func (b boxed) MarshalJSON() ([]byte, error) {
+	if b.v != nil && b.t.in != nil {
+		return b.t.in.marshalJSONValue(reflect.ValueOf(b.v), b.t.t)
+	}
+	return json.Marshal(b.v)
+}
 
 // String returns the type name and value, for debugging.
 func (b boxed) GoString() string { return fmt.Sprintf("%s(%#v)", b.t.name, b.v) }

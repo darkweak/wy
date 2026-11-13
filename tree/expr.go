@@ -770,7 +770,14 @@ func (c *compiler) sliceExpr(e *ast.SliceExpr) eval {
 		}
 		capacity := v.Cap()
 		var r reflect.Value
-		if max != nil {
+		if v.Kind() == reflect.Slice && capacity < 0 {
+			// A header made by reinterpreting other memory with unsafe
+			// (*(*[]byte)(unsafe.Pointer(&str)) reads a string header and
+			// whatever follows as the capacity). Compiled Go checks bounds
+			// as unsigned values and never looks at such a capacity again:
+			// do the same instead of rejecting it.
+			r = sliceUnsigned(v, l, h, max, fr, capacity)
+		} else if max != nil {
 			m := max(fr)
 			if l < 0 || h < l || m < h || m > capacity {
 				panic(runtimeError(fmt.Sprintf("slice bounds out of range [%d:%d:%d] with capacity %d", l, h, m, capacity)))
@@ -787,6 +794,28 @@ func (c *compiler) sliceExpr(e *ast.SliceExpr) eval {
 		}
 		return r
 	}
+}
+
+// sliceUnsigned slices the slice v whose capacity is negative, checking the
+// bounds as unsigned integers like compiled code.
+func sliceUnsigned(v reflect.Value, l, h int, max func(*frame) int, fr *frame, capacity int) reflect.Value {
+	newCap := capacity - l
+	if max != nil {
+		m := max(fr)
+		if uint(l) > uint(h) || uint(h) > uint(m) || uint(m) > uint(capacity) {
+			panic(runtimeError(fmt.Sprintf("slice bounds out of range [%d:%d:%d] with capacity %d", l, h, m, capacity)))
+		}
+		newCap = m - l
+	} else if uint(l) > uint(h) || uint(h) > uint(capacity) {
+		panic(runtimeError(fmt.Sprintf("slice bounds out of range [%d:%d] with capacity %d", l, h, capacity)))
+	}
+	hdr := struct {
+		Data     unsafe.Pointer
+		Len, Cap int
+	}{unsafe.Add(v.UnsafePointer(), uintptr(l)*v.Type().Elem().Size()), h - l, newCap}
+	r := reflect.New(v.Type()).Elem()
+	r.Set(reflect.NewAt(v.Type(), unsafe.Pointer(&hdr)).Elem())
+	return r
 }
 
 // --- unary and binary ------------------------------------------------------
@@ -929,16 +958,24 @@ func (in *Interp) assertion(T types.Type) func(iv reflect.Value) (reflect.Value,
 	if isInterface(T) {
 		return func(iv reflect.Value) (reflect.Value, bool) {
 			nt, e := in.dyn(iv)
-			if nt == nil || !nt.implements(T) {
+			if nt == nil {
 				return reflect.Value{}, false
+			}
+			if !nt.implements(T) {
+				if nt = in.recoverNamed(nt, e, func(c *ntype) bool { return c.implements(T) }); nt == nil {
+					return reflect.Value{}, false
+				}
 			}
 			return in.ifaceFrom(nt, e, rt), true
 		}
 	}
 	want := in.ntypes.get(T)
+	// Only pointers are recovered for concrete types: an unnamed struct
+	// value can legitimately have the reflect type of a named one.
+	_, isPtr := T.Underlying().(*types.Pointer)
 	return func(iv reflect.Value) (reflect.Value, bool) {
 		nt, e := in.dyn(iv)
-		if nt != want {
+		if nt != want && (nt == nil || !isPtr || in.recoverNamed(nt, e, func(c *ntype) bool { return c == want }) == nil) {
 			return reflect.Value{}, false
 		}
 		if e.Type() != rt {

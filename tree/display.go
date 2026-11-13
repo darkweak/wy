@@ -52,6 +52,11 @@ func (in *Interp) computeNeedsDisplay(t types.Type) bool {
 		return in.needsDisplay(u.Key()) || in.needsDisplay(u.Elem())
 	case *types.Struct:
 		for i := 0; i < u.NumFields(); i++ {
+			// An embedded unexported struct has an exported name in the
+			// reflect type (see embeddedStructName): print its Go name.
+			if f := u.Field(i); f.Embedded() && !f.Exported() && in.rtype(t).Field(i).Name != f.Name() {
+				return true
+			}
 			if in.needsDisplay(u.Field(i).Type()) {
 				return true
 			}

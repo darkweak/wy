@@ -1,0 +1,100 @@
+// Generic functions of package encoding/json/v2, interpreted from source.
+// The host registers a function for every type that hands the values of
+// type T to fn and skips the others. An interface T matches interpreted
+// types only through the methods of their values, not of their pointers.
+package json
+
+import (
+	"encoding/json/jsontext"
+	real "encoding/json/v2"
+	"reflect"
+	"unsafe"
+)
+
+// MarshalFunc constructs a type-specific marshaler that specifies how to
+// marshal values of type T.
+func MarshalFunc[T any](fn func(T) ([]byte, error)) *real.Marshalers {
+	return marshalFunc(reflect.TypeFor[T](), func(p unsafe.Pointer, pi, vi any) (bool, []byte, error) {
+		v, ok := castTo[T](p, pi, vi)
+		if !ok {
+			return false, nil, nil
+		}
+		b, err := fn(v)
+		return true, b, err
+	})
+}
+
+// MarshalToFunc constructs a type-specific marshaler that specifies how to
+// marshal values of type T.
+func MarshalToFunc[T any](fn func(*jsontext.Encoder, T) error) *real.Marshalers {
+	return marshalToFunc(reflect.TypeFor[T](), func(enc *jsontext.Encoder, p unsafe.Pointer, pi, vi any) (bool, error) {
+		v, ok := castTo[T](p, pi, vi)
+		if !ok {
+			return false, nil
+		}
+		return true, fn(enc, v)
+	})
+}
+
+// UnmarshalFunc constructs a type-specific unmarshaler that specifies how to
+// unmarshal values of type T.
+func UnmarshalFunc[T any](fn func([]byte, T) error) *real.Unmarshalers {
+	return unmarshalFunc(reflect.TypeFor[T](), func(b []byte, p unsafe.Pointer, pi any) error {
+		v, _ := castTo[T](p, pi, nil)
+		return fn(b, v)
+	})
+}
+
+// UnmarshalFromFunc constructs a type-specific unmarshaler that specifies how
+// to unmarshal values of type T.
+func UnmarshalFromFunc[T any](fn func(*jsontext.Decoder, T) error) *real.Unmarshalers {
+	return unmarshalFromFunc(reflect.TypeFor[T](), func(dec *jsontext.Decoder, p unsafe.Pointer, pi any) error {
+		v, _ := castTo[T](p, pi, nil)
+		return fn(dec, v)
+	})
+}
+
+// castTo returns the value of type T for p, a pointer to the value being
+// (un)marshaled, which pi holds: the pointer for interface and pointer
+// types, the value for other types. vi holds the value with its interpreted
+// type when it is known (it was stored in an interface), which tells apart
+// interpreted types with the same structure.
+func castTo[T any](p unsafe.Pointer, pi, vi any) (T, bool) {
+	switch reflect.TypeFor[T]().Kind() {
+	case reflect.Interface:
+		if vi != nil {
+			v, ok := vi.(T)
+			return v, ok
+		}
+		v, ok := pi.(T)
+		return v, ok
+	case reflect.Pointer:
+		return *(*T)(unsafe.Pointer(&p)), true
+	default:
+		if vi != nil {
+			if _, ok := vi.(T); !ok {
+				var zero T
+				return zero, false
+			}
+		}
+		return *(*T)(p), true
+	}
+}
+
+// GetOption returns the value stored in opts with the provided setter,
+// reporting whether the value is present.
+func GetOption[T any](opts real.Options, setter func(T) real.Options) (T, bool) {
+	v, ok := getOption(opts, setter)
+	if !ok {
+		var zero T
+		return zero, false
+	}
+	return v.(T), true
+}
+
+// Implemented by the host.
+func marshalFunc(t reflect.Type, fn func(p unsafe.Pointer, pi, vi any) (bool, []byte, error)) *real.Marshalers
+func marshalToFunc(t reflect.Type, fn func(enc *jsontext.Encoder, p unsafe.Pointer, pi, vi any) (bool, error)) *real.Marshalers
+func unmarshalFunc(t reflect.Type, fn func([]byte, unsafe.Pointer, any) error) *real.Unmarshalers
+func unmarshalFromFunc(t reflect.Type, fn func(*jsontext.Decoder, unsafe.Pointer, any) error) *real.Unmarshalers
+func getOption(opts real.Options, setter any) (any, bool)

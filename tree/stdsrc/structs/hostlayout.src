@@ -1,0 +1,14 @@
+// Package structs, interpreted from source. Copied from
+// GOROOT/src/structs/hostlayout.go.
+package structs
+
+// HostLayout marks a struct as using host memory layout.
+type HostLayout struct {
+	_ hostLayout // prevent accidental conversion with plain struct{}
+}
+
+// We use an unexported type within the exported type to give the marker
+// type itself, rather than merely its name, a recognizable identity in
+// the type system.
+type hostLayout struct {
+}

@@ -1,0 +1,29 @@
+// Package plugin, interpreted from source. Interpreted code cannot load Go
+// plugins: this is the stub of GOROOT/src/plugin for platforms without
+// plugin support (plugin.go and plugin_stubs.go), as in a host built without
+// cgo. wy does not link the real package, which would make cgo hosts link
+// dynamically.
+package plugin
+
+import "errors"
+
+// Plugin is a loaded Go plugin.
+type Plugin struct {
+	pluginpath string
+	err        string        // set if plugin failed to load
+	loaded     chan struct{} // closed when loaded
+	syms       map[string]any
+}
+
+// Open opens a Go plugin.
+func Open(path string) (*Plugin, error) {
+	return nil, errors.New("plugin: not implemented")
+}
+
+// Lookup searches for a symbol named symName in plugin p.
+func (p *Plugin) Lookup(symName string) (Symbol, error) {
+	return nil, errors.New("plugin: not implemented")
+}
+
+// A Symbol is a pointer to a variable or function.
+type Symbol any

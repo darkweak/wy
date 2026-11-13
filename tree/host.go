@@ -7,6 +7,8 @@ import (
 	"go/types"
 	"log"
 	"maps"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -194,6 +196,36 @@ func (in *Interp) hostOverrides() map[string]*native.Package {
 		maps.Copy(osFuncs, envFuncs(in.opts.Env))
 	}
 	override("os", osFuncs, osVars)
+
+	if in.opts.Restricted {
+		// Handlers registered by interpreted code, such as the debug pages
+		// of golang.org/x/net/trace, which the host may also contain, go
+		// to a private default mux. A Server without a Handler still
+		// serves the host's.
+		mux := http.NewServeMux()
+		orMux := func(h http.Handler) http.Handler {
+			if h == nil {
+				return mux
+			}
+			return h
+		}
+		override("net/http", map[string]reflect.Value{
+			"Handle":     reflect.ValueOf(mux.Handle),
+			"HandleFunc": reflect.ValueOf(mux.HandleFunc),
+			"ListenAndServe": reflect.ValueOf(func(addr string, h http.Handler) error {
+				return http.ListenAndServe(addr, orMux(h))
+			}),
+			"ListenAndServeTLS": reflect.ValueOf(func(addr, certFile, keyFile string, h http.Handler) error {
+				return http.ListenAndServeTLS(addr, certFile, keyFile, orMux(h))
+			}),
+			"Serve": reflect.ValueOf(func(l net.Listener, h http.Handler) error {
+				return http.Serve(l, orMux(h))
+			}),
+			"ServeTLS": reflect.ValueOf(func(l net.Listener, h http.Handler, certFile, keyFile string) error {
+				return http.ServeTLS(l, orMux(h), certFile, keyFile)
+			}),
+		}, map[string]reflect.Value{"DefaultServeMux": reflect.ValueOf(&mux)})
+	}
 	return out
 }
 

@@ -190,7 +190,7 @@ g := vals[0].(api.Greeter) // the host's own interface, implemented by interpret
     builtins;
   - `Env` gives the code a private copy of the environment;
   - `Restricted` makes `os.Exit` and `log.Fatal` panic instead of ending
-    the host process;
+    the host process, and gives the code its own `http.DefaultServeMux`;
   - `Forbid` lists packages the code may not import, such as `unsafe` and
     `syscall`.
 
